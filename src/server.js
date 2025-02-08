@@ -6,6 +6,9 @@ const app = express();
 // 静的ファイルの提供
 app.use(express.static('public'));
 
+const helmet = require('helmet');
+app.use(helmet());
+
 // Webhookルート以外でJSONパーサーを使用
 app.use((req, res, next) => {
   if (req.path === '/webhook') {
@@ -14,6 +17,13 @@ app.use((req, res, next) => {
     express.json()(req, res, next);
   }
 });
+
+const cors = require('cors');
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? 'https://handson-stripe.onrender.com'
+    : 'http://localhost:3000'
+}));
 
 // チェックアウトセッション作成エンドポイント
 app.post('/create-checkout-session', async (req, res) => {
@@ -25,8 +35,8 @@ app.post('/create-checkout-session', async (req, res) => {
         quantity: 1,
       }],
       mode: 'payment',
-      success_url: `${req.protocol}://${req.get('host')}/success.html`,
-      cancel_url: `${req.protocol}://${req.get('host')}/cancel.html`,
+      success_url: process.env.NODE_ENV === 'production' ? 'https://handson-stripe.onrender.com/success.html' : `${req.protocol}://${req.get('host')}/success.html`,
+      cancel_url: process.env.NODE_ENV === 'production' ? 'https://handson-stripe.onrender.com/cancel.html' : `${req.protocol}://${req.get('host')}/cancel.html`,
       locale: 'ja'
     });
     res.json({ id: session.id });
