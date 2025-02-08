@@ -1,56 +1,59 @@
 require("dotenv").config();
 const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const app = express();
-const path = require("path"); // pathモジュールを追加
+const path = require("path");
+const cors = require("cors");
+const helmet = require("helmet"); // helmet import を追加
 
-// 静的ファイルの提供
+const app = express();
+
+// 基本的なミドルウェア設定
+app.use(cors());
 app.use(express.static("public"));
 
-const helmet = require("helmet");
+// helmetの設定
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'", "https://*.stripe.com"],
+        fontSrc: [
+          "'self'",
+          "https://*.stripe.com",
+          "data:",
+          "https://js.stripe.com",
+        ],
+        scriptSrc: [
+          "'self'",
+          "https://*.stripe.com",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+        ],
+        styleSrc: ["'self'", "https://*.stripe.com", "'unsafe-inline'"],
+        imgSrc: ["'self'", "https://*.stripe.com", "data:"],
+        frameSrc: ["'self'", "https://*.stripe.com", "https://js.stripe.com"],
+        connectSrc: [
+          "'self'",
+          "https://*.stripe.com",
+          "https://api.stripe.com",
+        ],
+        formAction: ["'self'", "https://*.stripe.com"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: false,
+  })
+);
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: false,
-  crossOriginOpenerPolicy: false
-}));
 
-// カスタムCSPヘッダーを設定
-app.use((req, res, next) => {
-  res.setHeader(
-    'Content-Security-Policy-Report-Only',
-    "default-src 'self' https: data: 'unsafe-inline' 'unsafe-eval'; " +
-    "font-src 'self' https: data: js.stripe.com *.stripe.com; " +
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' js.stripe.com *.stripe.com; " +
-    "style-src 'self' 'unsafe-inline' *.stripe.com; " +
-    "img-src 'self' data: https: *.stripe.com; " +
-    "connect-src 'self' *.stripe.com; " +
-    "frame-src 'self' js.stripe.com *.stripe.com;"
-  );
-  next();
-});
-
-// favicon.icoのルートを追加
-app.get("/favicon.ico", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "favicon.ico"));
-});
-app.get('/config', (req, res) => {
-    res.json({
-      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
-    });
+// 設定エンドポイント
+app.get("/config", (req, res) => {
+  res.json({
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
   });
-// CORSの設定を修正
-const cors = require("cors");
-app.use(cors());
-
-// JSONパーサーの設定を修正
-app.use((req, res, next) => {
-  if (req.originalUrl === "/webhook") {
-    next();
-  } else {
-    express.json()(req, res, next);
-  }
 });
 
 // チェックアウトセッション作成エンドポイント
@@ -60,20 +63,29 @@ app.post("/create-checkout-session", async (req, res) => {
       payment_method_types: ["card"],
       line_items: [
         {
-          price: "price_1Qq4KNFwy2jHgB7D1oNdZJEK",
+          price:
+            process.env.STRIPE_PRICE_ID || "price_1Qq4KNFwy2jHgB7D1oNdZJEK",
           quantity: 1,
         },
       ],
       mode: "payment",
-      success_url:
+      success_url: `${
         process.env.NODE_ENV === "production"
-          ? "https://handson-stripe.onrender.com/success.html"
-          : `${req.protocol}://${req.get("host")}/success.html`,
-      cancel_url:
+          ? process.env.PRODUCTION_URL
+          : `${req.protocol}://${req.get("host")}`
+      }/success.html`,
+      cancel_url: `${
         process.env.NODE_ENV === "production"
-          ? "https://handson-stripe.onrender.com/cancel.html"
-          : `${req.protocol}://${req.get("host")}/cancel.html`,
+          ? process.env.PRODUCTION_URL
+          : `${req.protocol}://${req.get("host")}`
+      }/cancel.html`,
       locale: "ja",
+      // payment_method_optionsを修正
+      payment_method_options: {
+        card: {
+          setup_future_usage: "on_session", // 'off'から'on_session'に変更
+        },
+      },
     });
     res.json({ id: session.id });
   } catch (err) {
@@ -82,10 +94,10 @@ app.post("/create-checkout-session", async (req, res) => {
   }
 });
 
-// Webhookハンドラー
+
 app.post(
   "/webhook",
-  express.raw({ type: "application/json" }),
+  express.raw({ type: "application/json" }), // この行が重要
   async (req, res) => {
     const sig = req.headers["stripe-signature"];
 
@@ -96,31 +108,55 @@ app.post(
         process.env.WEBHOOK_SECRET
       );
 
-      console.log("Webhook event type:", event.type);
-
+      // イベントタイプに基づいて処理
       switch (event.type) {
+        case "charge.succeeded":
+          const charge = event.data.object;
+          console.log("支払い成功:", charge.id);
+          break;
+
         case "checkout.session.completed":
           const session = event.data.object;
-          console.log("Payment successful for session:", session.id);
-          // ここで支払い完了時の処理を実装
+          console.log("チェックアウト完了:", session.id);
+          // ここで注文処理など
           break;
 
-        case "payment_intent.payment_failed":
+        case "payment_intent.succeeded":
           const paymentIntent = event.data.object;
-          console.log("Payment failed for intent:", paymentIntent.id);
-          // ここで支払い失敗時の処理を実装
+          console.log("決済意図成功:", paymentIntent.id);
           break;
+
+        case "payment_intent.created":
+          console.log("決済意図作成:", event.data.object.id);
+          break;
+
+        case "charge.updated":
+          console.log("支払い情報更新:", event.data.object.id);
+          break;
+
+        default:
+          console.log(`未処理のイベントタイプ: ${event.type}`);
       }
 
       res.json({ received: true });
     } catch (err) {
-      console.error("Webhook error:", err.message);
+      console.error("Webhook エラー:", err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
   }
 );
 
-app.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+// JSONパーサーの設定
+app.use((req, res, next) => {
+  if (req.originalUrl === "/webhook") {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
   console.log("Webhook endpoint ready at /webhook");
 });

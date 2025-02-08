@@ -5,13 +5,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#5469d4">
+
   <script src="https://js.stripe.com/v3/"></script>
   <style>
     body { 
-      font-family: sans-serif; 
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       padding: 20px; 
       max-width: 800px;
       margin: 0 auto;
+      background-color: #f8fafc;
+    }
+    .container {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #1a2b4b;
+      margin-bottom: 1.5rem;
     }
     button {
       background: #5469d4;
@@ -20,38 +34,90 @@
       border: 0;
       border-radius: 4px;
       cursor: pointer;
-      transition: background-color 0.3s ease;
+      transition: all 0.2s ease;
+      font-size: 1rem;
+      font-weight: 500;
+      width: 100%;
+      max-width: 300px;
     }
     button:hover {
       background: #4a5cbd;
+      transform: translateY(-1px);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button.loading {
+      opacity: 0.7;
+      cursor: not-allowed;
     }
     .error {
       color: #dc3545;
       margin-top: 10px;
+      padding: 8px 12px;
+      background-color: #fff5f5;
+      border: 1px solid #fdd;
+      border-radius: 4px;
       display: none;
     }
-    .loading {
-      opacity: 0.5;
-      cursor: not-allowed;
+    .price {
+      font-size: 1.25rem;
+      color: #2d3748;
+      margin-bottom: 1.5rem;
+    }
+    .secure-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #4a5568;
+      font-size: 0.875rem;
+      margin-top: 1rem;
+    }
+    .secure-badge svg {
+      width: 16px;
+      height: 16px;
     }
   </style>
 </head>
 <body>
-  <h1>商品購入</h1>
-  <button id="checkout-button">購入する（¥1,000）</button>
-  <div id="error-message" class="error"></div>
+  <div class="container">
+    <h1>商品購入</h1>
+    <div class="price">¥1,000</div>
+    <button id="checkout-button">
+      購入する
+    </button>
+    <div id="error-message" class="error"></div>
+    <div class="secure-badge">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+      </svg>
+      安全な決済
+    </div>
+  </div>
 
   <script>
-    // APIキーをサーバーから取得
+    const RETRY_COUNT = 3;
+    const RETRY_DELAY = 1000;
+
     async function initializeStripe() {
-      try {
-        const response = await fetch('/config');
-        const { publishableKey } = await response.json();
-        const stripe = Stripe(publishableKey);
-        return stripe;
-      } catch (err) {
-        showError('Stripeの初期化に失敗しました');
-        throw err;
+      let attempts = 0;
+      while (attempts < RETRY_COUNT) {
+        try {
+          const response = await fetch('/config');
+          if (!response.ok) throw new Error('設定の取得に失敗しました');
+          const { publishableKey } = await response.json();
+          return Stripe(publishableKey, {
+            apiVersion: '2023-10-16',
+            locale: 'ja'
+          });
+        } catch (err) {
+          attempts++;
+          if (attempts === RETRY_COUNT) {
+            showError('Stripeの初期化に失敗しました');
+            throw err;
+          }
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        }
       }
     }
 
@@ -59,6 +125,10 @@
       const errorDiv = document.getElementById('error-message');
       errorDiv.textContent = message;
       errorDiv.style.display = 'block';
+      
+      // エラーが表示されたらスクロール
+      errorDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
       setTimeout(() => {
         errorDiv.style.display = 'none';
       }, 5000);
@@ -66,10 +136,13 @@
 
     async function handleCheckout(stripe) {
       const button = document.getElementById('checkout-button');
-      button.classList.add('loading');
-      button.disabled = true;
-
+      const originalText = button.textContent;
+      
       try {
+        button.classList.add('loading');
+        button.disabled = true;
+        button.textContent = '処理中...';
+
         const response = await fetch('/create-checkout-session', {
           method: 'POST',
           headers: {
@@ -78,23 +151,24 @@
         });
 
         if (!response.ok) {
-          throw new Error('チェックアウトセッションの作成に失敗しました');
+          const error = await response.json();
+          throw new Error(error.message || 'チェックアウトセッションの作成に失敗しました');
         }
 
         const session = await response.json();
-        const result = await stripe.redirectToCheckout({
+        const { error } = await stripe.redirectToCheckout({
           sessionId: session.id
         });
 
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
+        if (error) throw error;
+
       } catch (err) {
-        console.error(err);
-        showError(err.message || 'エラーが発生しました');
+        console.error('Checkout Error:', err);
+        showError(err.message || '決済処理中にエラーが発生しました');
       } finally {
         button.classList.remove('loading');
         button.disabled = false;
+        button.textContent = originalText;
       }
     }
 
