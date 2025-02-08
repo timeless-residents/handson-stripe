@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: stripe-payment-demo
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PRICE_ID
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: PRODUCTION_URL
+        sync: false

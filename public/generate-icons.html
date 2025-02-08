@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Icon Generator</title>
+    <style>
+        body { 
+            background: #f0f0f0; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: system-ui;
+        }
+        .canvas-container {
+            margin: 20px;
+            display: flex;
+            gap: 20px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            background: white;
+        }
+        .download-links {
+            display: flex;
+            gap: 20px;
+        }
+        a {
+            padding: 10px 20px;
+            background: #5469d4;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Icon Generator</h1>
+    <div class="canvas-container">
+        <canvas id="canvas32" width="32" height="32"></canvas>
+        <canvas id="canvas192" width="192" height="192"></canvas>
+        <canvas id="canvas512" width="512" height="512"></canvas>
+    </div>
+    <div id="status">Generating icons...</div>
+    <script>
+        async function saveIcon(canvas, filename) {
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            const formData = new FormData();
+            formData.append('icon', blob, filename);
+            
+            const response = await fetch('/save-icon', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to save ${filename}`);
+            }
+            return filename;
+        }
+        
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            
+            // Fill background
+            ctx.fillStyle = '#5469d4';
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw text
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size * 0.5}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('決', size/2, size/2);
+            
+            return canvas;
+        }
+
+        async function init() {
+            const status = document.getElementById('status');
+            try {
+                const canvas32 = drawIcon(document.getElementById('canvas32'), 32);
+                const canvas192 = drawIcon(document.getElementById('canvas192'), 192);
+                const canvas512 = drawIcon(document.getElementById('canvas512'), 512);
+                
+                await Promise.all([
+                    saveIcon(canvas32, 'favicon.ico'),
+                    saveIcon(canvas192, 'icon-192x192.png'),
+                    saveIcon(canvas512, 'icon-512x512.png')
+                ]);
+                
+                status.textContent = 'Icons generated and saved successfully!';
+            } catch (error) {
+                status.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
