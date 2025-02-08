@@ -7,48 +7,6 @@ const helmet = require("helmet"); // helmet import を追加
 
 const app = express();
 
-// 基本的なミドルウェア設定
-app.use(cors());
-app.use(express.static("public"));
-
-// helmetの設定
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      useDefaults: false,
-      directives: {
-        defaultSrc: ["'self'", "https://*.stripe.com"],
-        fontSrc: [
-          "'self'",
-          "https://*.stripe.com",
-          "data:",
-          "https://js.stripe.com",
-        ],
-        scriptSrc: [
-          "'self'",
-          "https://*.stripe.com",
-          "'unsafe-inline'",
-          "'unsafe-eval'",
-        ],
-        styleSrc: ["'self'", "https://*.stripe.com", "'unsafe-inline'"],
-        imgSrc: ["'self'", "https://*.stripe.com", "data:"],
-        frameSrc: ["'self'", "https://*.stripe.com", "https://js.stripe.com"],
-        connectSrc: [
-          "'self'",
-          "https://*.stripe.com",
-          "https://api.stripe.com",
-        ],
-        formAction: ["'self'", "https://*.stripe.com"],
-        frameAncestors: ["'none'"],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginOpenerPolicy: false,
-  })
-);
-
-
 // 設定エンドポイント
 app.get("/config", (req, res) => {
   res.json({
@@ -97,7 +55,7 @@ app.post("/create-checkout-session", async (req, res) => {
 
 app.post(
   "/webhook",
-  express.raw({ type: "application/json" }), // この行が重要
+  express.raw({ type: "application/json" }),
   async (req, res) => {
     const sig = req.headers["stripe-signature"];
 
@@ -154,6 +112,49 @@ app.use((req, res, next) => {
     express.json()(req, res, next);
   }
 });
+
+// 基本的なミドルウェア設定
+app.use(cors());
+app.use(express.static("public"));
+
+// helmetの設定
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'", "https://*.stripe.com"],
+        fontSrc: [
+          "'self'",
+          "https://*.stripe.com",
+          "data:",
+          "https://js.stripe.com",
+        ],
+        scriptSrc: [
+          "'self'",
+          "https://*.stripe.com",
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+        ],
+        styleSrc: ["'self'", "https://*.stripe.com", "'unsafe-inline'"],
+        imgSrc: ["'self'", "https://*.stripe.com", "data:"],
+        frameSrc: ["'self'", "https://*.stripe.com", "https://js.stripe.com"],
+        connectSrc: [
+          "'self'",
+          "https://*.stripe.com",
+          "https://api.stripe.com",
+        ],
+        formAction: ["'self'", "https://*.stripe.com"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: false,
+  })
+);
+app.use(express.json()); 
+
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
