@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>決済デモ</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button {
+      background: #5469d4;
+      color: white;
+      padding: 12px 24px;
+      border: 0;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>商品購入</h1>
+  <button id="checkout-button">購入する（¥1,000）</button>
+
+  <script>
+    const stripe = Stripe('pk_test_o0P7bLB9lwGztdez2JEGN4pj'); // 公開可能キーを設定
+    const checkoutButton = document.getElementById('checkout-button');
+
+    checkoutButton.addEventListener('click', async () => {
+      try {
+        const response = await fetch('/create-checkout-session', {
+          method: 'POST',
+        });
+        const session = await response.json();
+        const result = await stripe.redirectToCheckout({
+          sessionId: session.id
+        });
+        if (result.error) {
+          alert(result.error.message);
+        }
+      } catch (err) {
+        console.error(err);
+        alert('エラーが発生しました');
+      }
+    });
+  </script>
+</body>
+</html>
