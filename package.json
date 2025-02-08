@@ -12,9 +12,10 @@
   "license": "ISC",
   "description": "",
   "engines": {
-    "node": "18.x"
+    "node": ">=18.x"
   },
   "dependencies": {
+    "@mailchimp/mailchimp_marketing": "^3.0.80",
     "body-parser": "^1.20.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
